@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        env:
+          PYTHONPATH: backend:tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate tutorial notebook
+        run: |
+          pip install --quiet nbformat
+          python - <<'EOF'
+          import nbformat
+          nb = nbformat.read("notebooks/tutorial.ipynb", as_version=4)
+          nbformat.validate(nb)
+          errors = [
+              o for c in nb.cells if c.cell_type == "code"
+              for o in c.get("outputs", []) if o.output_type == "error"
+          ]
+          assert not errors, f"notebook contains {len(errors)} error output(s)"
+          print(f"notebook OK: {len(nb.cells)} cells, no error outputs")
+          EOF

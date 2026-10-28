@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Retards Rouen Rive Droite → Paris Saint-Lazare</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Retards Rouen Rive Droite → Paris Saint-Lazare</h1>
+    <p class="subtitle">Suivi des retards des trains SNCF (TER Normandie &amp; Intercités), basé sur l'API temps réel SNCF.</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-period="daily" role="tab">Journalier</button>
+    <button class="tab" data-period="weekly" role="tab">Hebdomadaire</button>
+    <button class="tab" data-period="monthly" role="tab">Mensuel</button>
+  </nav>
+
+  <main>
+    <section class="controls">
+      <label for="period-select">Période :</label>
+      <select id="period-select"></select>
+      <span id="generated-at" class="muted"></span>
+    </section>
+
+    <section id="summary-cards" class="cards"></section>
+
+    <section>
+      <canvas id="chart" height="120"></canvas>
+    </section>
+
+    <section>
+      <h2>Détail des trains</h2>
+      <table id="trains-table">
+        <thead>
+          <tr>
+            <th>Train</th>
+            <th>Ligne</th>
+            <th>Direction</th>
+            <th>Départ prévu</th>
+            <th>Départ réel</th>
+            <th>Arrivée prévue</th>
+            <th>Arrivée réelle</th>
+            <th>Arrêt odométrie</th>
+            <th>Retard</th>
+            <th>Retard odométrie</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <section id="odometry-section" style="display:none">
+    <h2>Odyssée des trains (odométrie GTFS-RT)</h2>
+    <p class="muted" id="odometry-summary"></p>
+    <div id="odometry-cards" class="cards"></div>
+    <table id="odometry-table">
+      <thead>
+        <tr>
+          <th>Course (trip_id)</th>
+          <th>Fixes GPS</th>
+          <th>Distance</th>
+          <th>Temps de trajet</th>
+          <th>Arrêts détectés</th>
+          <th>Premier arrêt</th>
+          <th>Dernier arrêt</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <footer>
+    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT VehiclePositions (transport.data.gouv.fr). Un retard est comptabilisé à partir de 5 minutes. « Arrêt odométrie » = instant estimé par détection d'arrêt sur la trace GPS du train (meilleur estimate de l'arrivée réelle).</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
