@@ -5,6 +5,8 @@ on:
     # Every 15 minutes, 05:00–23:45 Europe/Paris (UTC+1/UTC+2)
     - cron: "5,20,35,50 4-22 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
