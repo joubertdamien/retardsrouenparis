@@ -3,9 +3,6 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - "backend/**"
   workflow_dispatch:
   workflow_run:
     workflows: ["Collect SNCF departures"]
