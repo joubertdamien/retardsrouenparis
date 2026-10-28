@@ -43,7 +43,9 @@
             <th>Départ réel</th>
             <th>Arrivée prévue</th>
             <th>Arrivée réelle</th>
+            <th>Arrêt odométrie</th>
             <th>Retard</th>
+            <th>Retard odométrie</th>
             <th>Statut</th>
           </tr>
         </thead>
@@ -52,8 +54,28 @@
     </section>
   </main>
 
+  <section id="odometry-section" style="display:none">
+    <h2>Odyssée des trains (odométrie GTFS-RT)</h2>
+    <p class="muted" id="odometry-summary"></p>
+    <div id="odometry-cards" class="cards"></div>
+    <table id="odometry-table">
+      <thead>
+        <tr>
+          <th>Course (trip_id)</th>
+          <th>Fixes GPS</th>
+          <th>Distance</th>
+          <th>Temps de trajet</th>
+          <th>Arrêts détectés</th>
+          <th>Premier arrêt</th>
+          <th>Dernier arrêt</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
   <footer>
-    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com). Un retard est comptabilisé à partir de 5 minutes. Source : SNCF Open Data / API temps réel.</p>
+    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT VehiclePositions (transport.data.gouv.fr). Un retard est comptabilisé à partir de 5 minutes. « Arrêt odométrie » = instant estimé par détection d'arrêt sur la trace GPS du train (meilleur estimate de l'arrivée réelle).</p>
   </footer>
 
   <script src="app.js"></script>

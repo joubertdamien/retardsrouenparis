@@ -1,6 +1,6 @@
 "use strict";
 
-const state = { period: "daily", index: null, series: null, current: null };
+const state = { period: "daily", index: null, series: null, current: null, odometry: null };
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -174,10 +174,63 @@ function fillPeriodSelect() {
   if (select.options.length) loadReport({ url: select.value });
 }
 
+function renderOdometry(odometry) {
+  const section = document.getElementById("odometry-section");
+  if (!odometry || !odometry.trips_tracked) return;
+  section.style.display = "block";
+  document.getElementById("odometry-summary").textContent =
+    `${odometry.trips_tracked} courses suivies par GPS · ${odometry.trains_matched} trains rapprochés · ${odometry.arrivals_cross_checked} arrivées vérifiées par odométrie`;
+
+  const cards = document.getElementById("odometry-cards");
+  cards.innerHTML = "";
+  for (const item of [
+    { label: "Courses suivies", value: odometry.trips_tracked, cls: "" },
+    { label: "Trains rapprochés", value: odometry.trains_matched, cls: "" },
+    { label: "Arrivées vérifiées", value: odometry.arrivals_cross_checked, cls: "good" },
+  ]) {
+    const card = document.createElement("div");
+    card.className = `card ${item.cls}`;
+    card.innerHTML = `<div class="value"></div><div class="label"></div>`;
+    card.querySelector(".value").textContent = item.value;
+    card.querySelector(".label").textContent = item.label;
+    cards.appendChild(card);
+  }
+
+  const tbody = document.querySelector("#odometry-table tbody");
+  tbody.innerHTML = "";
+  const trips = Object.entries(odometry.trips).sort(
+    (a, b) => b[1].fixes.length - a[1].fixes.length
+  );
+  for (const [tripId, trip] of trips.slice(0, 50)) {
+    const tr = document.createElement("tr");
+    const cells = [
+      tripId,
+      trip.fixes.length,
+      `${(trip.distance_m / 1000).toFixed(1)} km`,
+      `${(trip.moving_time_seconds / 60).toFixed(0)} min`,
+      trip.stop_events.length,
+      trip.stop_events.length ? fmtTime(trip.stop_events[0].start) : "—",
+      trip.stop_events.length ? fmtTime(trip.stop_events[trip.stop_events.length - 1].end) : "—",
+    ];
+    for (const cell of cells) {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+}
+
 async function init() {
   try {
     state.index = await fetchJson("index.json");
     state.series = await fetchJson("series.json");
+    try {
+      state.odometry = await fetchJson("odometry.json");
+      renderOdometry(state.odometry);
+    } catch {
+      state.odometry = null;
+    }
   } catch (error) {
     document.querySelector("main").innerHTML =
       `<p class="card">Aucune donnée disponible pour le moment. ${error.message}</p>`;

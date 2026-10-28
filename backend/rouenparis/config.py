@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 DEFAULT_API_BASE = "https://api.sncf.com/v1"
 DEFAULT_COVERAGE = "sncf"
@@ -11,6 +11,10 @@ ROUEN_RIVE_DROITE_STOP_AREA = "stop_area:SNCF:87411017"
 PARIS_ST_LAZARE_STOP_AREA = "stop_area:SNCF:87271007"
 
 LOCAL_TZ = "Europe/Paris"
+
+DEFAULT_GTFS_RT_VEHICLE_POSITIONS_URL = (
+    "https://proxy.transport.data.gouv.fr/resource/sncf-gtfs-rt-vehicle-positions"
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +33,13 @@ class Settings:
     min_delay_minutes: int = 5
     snapshots_per_day: int = 0
     lines: tuple = ()
+    gtfs_rt_vehicle_positions_url: str = DEFAULT_GTFS_RT_VEHICLE_POSITIONS_URL
+    gtfs_rt_route_ids: tuple = ()
+    track_positions: bool = True
+    stop_radius_m: float = 150.0
+    min_stop_duration_seconds: float = 60.0
+    station_latitude: float = 48.8809
+    station_longitude: float = 2.3206
 
     @classmethod
     def from_env(cls, env=None, require_token: bool = True):
@@ -62,4 +73,18 @@ class Settings:
             min_delay_minutes=int(env.get("ROUENPARIS_MIN_DELAY_MINUTES", "5")),
             snapshots_per_day=int(env.get("ROUENPARIS_SNAPSHOTS_PER_DAY", "0")),
             lines=lines,
+            gtfs_rt_vehicle_positions_url=env.get(
+                "ROUENPARIS_GTFS_RT_VEHICLE_POSITIONS_URL",
+                DEFAULT_GTFS_RT_VEHICLE_POSITIONS_URL,
+            ),
+            gtfs_rt_route_ids=tuple(
+                route.strip()
+                for route in env.get("ROUENPARIS_GTFS_RT_ROUTE_IDS", "").split(",")
+                if route.strip()
+            ),
+            track_positions=env.get("ROUENPARIS_TRACK_POSITIONS", "1") not in ("0", "false", "no"),
+            stop_radius_m=float(env.get("ROUENPARIS_STOP_RADIUS_M", "150")),
+            min_stop_duration_seconds=float(env.get("ROUENPARIS_MIN_STOP_DURATION_S", "60")),
+            station_latitude=float(env.get("ROUENPARIS_STATION_LATITUDE", "48.8809")),
+            station_longitude=float(env.get("ROUENPARIS_STATION_LONGITUDE", "2.3206")),
         )

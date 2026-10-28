@@ -8,11 +8,27 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .config import Settings
+from .positions import append_position_records
 from .reports import generate_all
 from .sncf_client import SncfClient
 from .storage import TZ, Snapshot, append_snapshot
+from .vehicle_positions import VehiclePositionsClient
 
 logger = logging.getLogger(__name__)
+
+
+def collect_positions(settings: Settings) -> int:
+    if not settings.track_positions:
+        logger.info("position tracking disabled (ROUENPARIS_TRACK_POSITIONS=0)")
+        return 0
+    client = VehiclePositionsClient(settings)
+    records = client.fetch_vehicles_for_route()
+    if not records:
+        logger.warning("no vehicle positions matched the configured routes")
+        return 0
+    path = append_position_records(settings.data_dir, records)
+    logger.info("%d vehicle positions stored in %s", len(records), path)
+    return len(records)
 
 
 def cmd_collect(args) -> int:
@@ -30,8 +46,18 @@ def cmd_collect(args) -> int:
         logger.info(
             "snapshot %d: %d departures stored in %s", index + 1, len(observations), path
         )
+        try:
+            collect_positions(settings)
+        except Exception as error:
+            logger.warning("position collection failed: %s", error)
         if index + 1 < args.count:
             time.sleep(args.interval_seconds)
+    return 0
+
+
+def cmd_collect_positions(args) -> int:
+    settings = Settings.from_env(require_token=False)
+    collect_positions(settings)
     return 0
 
 
@@ -92,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument("--count", type=int, default=1)
     all_cmd.add_argument("--interval-seconds", type=int, default=900)
     all_cmd.set_defaults(func=cmd_all)
+
+    positions = subparsers.add_parser(
+        "collect-positions",
+        help="fetch GTFS-RT vehicle positions (no API token needed)",
+    )
+    positions.set_defaults(func=cmd_collect_positions)
 
     resolve = subparsers.add_parser(
         "resolve-stations", help="resolve stop_area ids from UIC codes"
