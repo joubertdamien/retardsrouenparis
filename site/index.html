@@ -43,10 +43,30 @@
             <th>Départ réel</th>
             <th>Arrivée prévue</th>
             <th>Arrivée réelle</th>
-            <th>Arrêt odométrie</th>
+            <th>Retard GTFS-RT</th>
             <th>Retard</th>
-            <th>Retard odométrie</th>
+            <th>Écart</th>
             <th>Statut</th>
+            <th>Vérif.</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="crosscheck-section" style="display:none">
+      <h2>Vérification croisée — GTFS-RT TripUpdates</h2>
+      <p class="muted" id="crosscheck-summary"></p>
+      <div id="crosscheck-cards" class="cards"></div>
+      <table id="crosscheck-table">
+        <thead>
+          <tr>
+            <th>Train</th>
+            <th>Date</th>
+            <th>Retard annoncé (API)</th>
+            <th>Retard GTFS-RT</th>
+            <th>Écart</th>
+            <th>Accord</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -54,28 +74,8 @@
     </section>
   </main>
 
-  <section id="odometry-section" style="display:none">
-    <h2>Odyssée des trains (odométrie GTFS-RT)</h2>
-    <p class="muted" id="odometry-summary"></p>
-    <div id="odometry-cards" class="cards"></div>
-    <table id="odometry-table">
-      <thead>
-        <tr>
-          <th>Course (trip_id)</th>
-          <th>Fixes GPS</th>
-          <th>Distance</th>
-          <th>Temps de trajet</th>
-          <th>Arrêts détectés</th>
-          <th>Premier arrêt</th>
-          <th>Dernier arrêt</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
   <footer>
-    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT VehiclePositions (transport.data.gouv.fr). Un retard est comptabilisé à partir de 5 minutes. « Arrêt odométrie » = instant estimé par détection d'arrêt sur la trace GPS du train (meilleur estimate de l'arrivée réelle).</p>
+    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT TripUpdates (transport.data.gouv.fr, sans token). Un retard est comptabilisé à partir de 5 minutes. La <strong>vérification croisée</strong> compare le retard annoncé par l'API SNCF avec le retard à l'arrivée à Paris Saint-Lazare extrait indépendamment du flux GTFS-RT TripUpdates (tolérance : 60 secondes).</p>
   </footer>
 
   <script src="app.js"></script>

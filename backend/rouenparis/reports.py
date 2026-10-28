@@ -10,6 +10,7 @@ from .config import Settings
 from .odometry import estimate_arrival_at
 from .positions import build_odometries, load_position_records, match_odometry_to_train
 from .storage import TZ, dedupe_final_observations, load_snapshots
+from .trip_storage import cross_check_train, load_trip_profiles
 
 
 @dataclass
@@ -29,6 +30,7 @@ class TrainRecord:
     odometry: object = None
     odometry_arrival: datetime | None = None
     odometry_delay_seconds: int | None = None
+    trip_update_cross_check: dict | None = None
 
     @property
     def cancelled(self) -> bool:
@@ -57,6 +59,23 @@ class TrainRecord:
             else None,
             "odometry_distance_m": round(self.odometry.distance_m, 1) if self.odometry else None,
             "odometry_stop_events": len(self.odometry.stop_events) if self.odometry else None,
+            "trip_update_delay_seconds": self.trip_update_cross_check.get("trip_updates_delay_seconds")
+            if self.trip_update_cross_check
+            else None,
+            "trip_update_delay_minutes": round(
+                self.trip_update_cross_check["trip_updates_delay_seconds"] / 60, 1
+            )
+            if self.trip_update_cross_check
+            and self.trip_update_cross_check.get("trip_updates_delay_seconds") is not None
+            else None,
+            "delay_cross_check_agrees": self.trip_update_cross_check.get("agrees")
+            if self.trip_update_cross_check
+            else None,
+            "delay_cross_check_difference_seconds": self.trip_update_cross_check.get(
+                "difference_seconds"
+            )
+            if self.trip_update_cross_check
+            else None,
         }
 
 
@@ -65,6 +84,7 @@ def build_train_records(
     min_delay_seconds: int = 300,
     odometries: dict | None = None,
     settings: Settings | None = None,
+    trip_profiles: list | None = None,
 ) -> list[TrainRecord]:
     records = []
     for train in dedupe_final_observations(snapshots):
@@ -82,6 +102,16 @@ def build_train_records(
                 )
                 if odometry_arrival is not None and train.base_arrival is not None:
                     odometry_delay = int((odometry_arrival - train.base_arrival).total_seconds())
+        cross_check = None
+        if trip_profiles and settings is not None:
+            cross_check = cross_check_train(
+                trip_profiles,
+                train.train_number,
+                train.base_departure,
+                settings.destination_uic8,
+                delay,
+                origin_uic8=settings.origin_uic8,
+            )
         record = TrainRecord(
             train_number=train.train_number,
             line_code=train.line_code,
@@ -108,6 +138,7 @@ def build_train_records(
             odometry=odometry,
             odometry_arrival=odometry_arrival,
             odometry_delay_seconds=odometry_delay,
+            trip_update_cross_check=cross_check,
         )
         records.append(record)
     records.sort(key=lambda record: record.scheduled_departure)
@@ -131,6 +162,8 @@ def summarize(records: list[TrainRecord], min_delay_seconds: int) -> dict:
     measured = [record for record in circulated if record.delay_seconds is not None]
     delayed = [record for record in measured if record.delay_seconds >= min_delay_seconds]
     delays = [record.delay_seconds for record in measured]
+    cross_checked = [r for r in records if r.trip_update_cross_check is not None]
+    cross_agreeing = [r for r in cross_checked if r.trip_update_cross_check.get("agrees")]
     return {
         "scheduled": len(records),
         "circulated": len(circulated),
@@ -143,6 +176,8 @@ def summarize(records: list[TrainRecord], min_delay_seconds: int) -> dict:
         "avg_delay_minutes": round(sum(delays) / len(delays) / 60, 1) if delays else None,
         "max_delay_minutes": round(max(delays) / 60, 1) if delays else None,
         "min_delay_threshold_minutes": min_delay_seconds // 60,
+        "cross_checked": len(cross_checked),
+        "cross_check_agreeing": len(cross_agreeing),
     }
 
 
@@ -187,8 +222,13 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
         stop_radius_m=settings.stop_radius_m,
         min_stop_duration_seconds=settings.min_stop_duration_seconds,
     )
+    trip_profiles = list(load_trip_profiles(data_dir))
     records = build_train_records(
-        snapshots, settings.min_delay_minutes * 60, odometries=odometries, settings=settings
+        snapshots,
+        settings.min_delay_minutes * 60,
+        odometries=odometries,
+        settings=settings,
+        trip_profiles=trip_profiles,
     )
     site_path = Path(site_dir)
     reports_dir = site_path / "reports"
@@ -246,6 +286,12 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
 
     matched = sum(1 for record in records if record.odometry is not None)
     cross_checked = sum(1 for record in records if record.odometry_arrival is not None)
+    tu_checked = sum(1 for record in records if record.trip_update_cross_check is not None)
+    tu_agreeing = sum(
+        1
+        for record in records
+        if record.trip_update_cross_check and record.trip_update_cross_check.get("agrees")
+    )
     (site_path / "odometry.json").write_text(
         json.dumps(
             {
@@ -266,11 +312,45 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
         encoding="utf-8",
     )
 
+    (site_path / "crosscheck.json").write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "source": "GTFS-RT TripUpdates (transport.data.gouv.fr)",
+                "destination_uic8": settings.destination_uic8,
+                "trips_in_feed": len({p.get("trip_id") for p in trip_profiles}),
+                "trains_cross_checked": tu_checked,
+                "delays_agreeing": tu_agreeing,
+                "tolerance_seconds": 60,
+                "trains": [
+                    {
+                        "train_number": record.train_number,
+                        "service_date": record.service_date.isoformat(),
+                        "scheduled_departure": record.scheduled_departure,
+                        "announced_delay_seconds": record.delay_seconds,
+                        **record.trip_update_cross_check,
+                    }
+                    for record in records
+                    if record.trip_update_cross_check is not None
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
     index["days_tracked"] = len(series)
     index["odometry"] = {
         "trips_tracked": len(odometries),
         "trains_matched": matched,
         "arrivals_cross_checked": cross_checked,
+    }
+    index["cross_check"] = {
+        "trips_in_feed": len({p.get("trip_id") for p in trip_profiles}),
+        "trains_cross_checked": tu_checked,
+        "delays_agreeing": tu_agreeing,
     }
     (site_path / "index.json").write_text(
         json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

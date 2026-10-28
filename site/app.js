@@ -1,6 +1,6 @@
 "use strict";
 
-const state = { period: "daily", index: null, series: null, current: null, odometry: null };
+const state = { period: "daily", index: null, series: null, current: null, crosscheck: null };
 
 async function fetchJson(url) {
   const response = await fetch(url);
@@ -24,6 +24,11 @@ function fmtDelay(minutes) {
   if (minutes === null || minutes === undefined) return "—";
   if (minutes < 0) return `${minutes.toFixed(1)} min (avance)`;
   return `+${minutes.toFixed(1)} min`;
+}
+
+function fmtDelaySec(seconds) {
+  if (seconds === null || seconds === undefined) return "—";
+  return fmtDelay(seconds / 60);
 }
 
 function periodLabel(report) {
@@ -52,6 +57,13 @@ function renderSummary(summary) {
     { label: "Retard moyen", value: fmtDelay(summary.avg_delay_minutes), cls: "" },
     { label: "Retard max", value: fmtDelay(summary.max_delay_minutes), cls: summary.max_delay_minutes >= 15 ? "bad" : "" },
   ];
+  if (summary.cross_checked !== undefined && summary.cross_checked > 0) {
+    items.push({
+      label: "Vérifiés (GTFS-RT)",
+      value: `${summary.cross_check_agreeing}/${summary.cross_checked}`,
+      cls: summary.cross_check_agreeing === summary.cross_checked ? "good" : "bad",
+    });
+  }
   for (const item of items) {
     const card = document.createElement("div");
     card.className = `card ${item.cls}`;
@@ -60,6 +72,16 @@ function renderSummary(summary) {
     card.querySelector(".label").textContent = item.label;
     cards.appendChild(card);
   }
+}
+
+function crossCheckBadge(train) {
+  if (train.delay_cross_check_agrees === null || train.delay_cross_check_agrees === undefined) {
+    return '<span class="badge muted">non vérifié</span>';
+  }
+  if (train.delay_cross_check_agrees) {
+    return '<span class="badge ok">concordant</span>';
+  }
+  return '<span class="badge delayed">écart détecté</span>';
 }
 
 function renderTrains(trains) {
@@ -76,6 +98,9 @@ function renderTrains(trains) {
         ? '<span class="badge delayed">en retard</span>'
         : '<span class="badge ok">à l\'heure</span>';
 
+    const diff = train.delay_cross_check_difference_seconds;
+    const diffText = diff === null || diff === undefined ? "—" : `±${(diff / 60).toFixed(1)} min`;
+
     const cells = [
       train.train_number || "—",
       train.line_code || train.line_name || "—",
@@ -84,8 +109,11 @@ function renderTrains(trains) {
       fmtTime(train.actual_departure),
       fmtTime(train.scheduled_arrival),
       fmtTime(train.actual_arrival),
+      fmtDelaySec(train.trip_update_delay_seconds),
       fmtDelay(train.delay_minutes),
+      diffText,
       badge,
+      crossCheckBadge(train),
     ];
     for (const cell of cells) {
       const td = document.createElement("td");
@@ -174,19 +202,23 @@ function fillPeriodSelect() {
   if (select.options.length) loadReport({ url: select.value });
 }
 
-function renderOdometry(odometry) {
-  const section = document.getElementById("odometry-section");
-  if (!odometry || !odometry.trips_tracked) return;
+function renderCrosscheck(crosscheck) {
+  const section = document.getElementById("crosscheck-section");
+  if (!crosscheck || !crosscheck.trains_cross_checked) return;
   section.style.display = "block";
-  document.getElementById("odometry-summary").textContent =
-    `${odometry.trips_tracked} courses suivies par GPS · ${odometry.trains_matched} trains rapprochés · ${odometry.arrivals_cross_checked} arrivées vérifiées par odométrie`;
 
-  const cards = document.getElementById("odometry-cards");
+  const total = crosscheck.trains_cross_checked;
+  const agreeing = crosscheck.delays_agreeing;
+  document.getElementById("crosscheck-summary").textContent =
+    `${crosscheck.trips_in_feed} courses dans le flux GTFS-RT · ${total} trains vérifiés · ${agreeing} retards concordants (tolérance ${crosscheck.tolerance_seconds}s)`;
+
+  const cards = document.getElementById("crosscheck-cards");
   cards.innerHTML = "";
   for (const item of [
-    { label: "Courses suivies", value: odometry.trips_tracked, cls: "" },
-    { label: "Trains rapprochés", value: odometry.trains_matched, cls: "" },
-    { label: "Arrivées vérifiées", value: odometry.arrivals_cross_checked, cls: "good" },
+    { label: "Courses GTFS-RT", value: crosscheck.trips_in_feed, cls: "" },
+    { label: "Trains vérifiés", value: total, cls: "" },
+    { label: "Retards concordants", value: agreeing, cls: agreeing === total ? "good" : "bad" },
+    { label: "Taux d'accord", value: total ? `${Math.round(agreeing / total * 100)} %` : "—", cls: agreeing === total ? "good" : "bad" },
   ]) {
     const card = document.createElement("div");
     card.className = `card ${item.cls}`;
@@ -196,25 +228,35 @@ function renderOdometry(odometry) {
     cards.appendChild(card);
   }
 
-  const tbody = document.querySelector("#odometry-table tbody");
+  const tbody = document.querySelector("#crosscheck-table tbody");
   tbody.innerHTML = "";
-  const trips = Object.entries(odometry.trips).sort(
-    (a, b) => b[1].fixes.length - a[1].fixes.length
-  );
-  for (const [tripId, trip] of trips.slice(0, 50)) {
+  const trains = (crosscheck.trains || []).slice().reverse();
+  for (const train of trains.slice(0, 100)) {
     const tr = document.createElement("tr");
+    const agrees = train.agrees;
+    if (agrees === true) tr.className = "";
+    else if (agrees === false) tr.className = "delayed";
+
+    const agreeBadge = agrees === true
+      ? '<span class="badge ok">concordant</span>'
+      : agrees === false
+        ? '<span class="badge delayed">écart</span>'
+        : '<span class="badge muted">—</span>';
+
+    const diff = train.difference_seconds;
+    const diffText = diff === null || diff === undefined ? "—" : `${(diff / 60).toFixed(1)} min`;
+
     const cells = [
-      tripId,
-      trip.fixes.length,
-      `${(trip.distance_m / 1000).toFixed(1)} km`,
-      `${(trip.moving_time_seconds / 60).toFixed(0)} min`,
-      trip.stop_events.length,
-      trip.stop_events.length ? fmtTime(trip.stop_events[0].start) : "—",
-      trip.stop_events.length ? fmtTime(trip.stop_events[trip.stop_events.length - 1].end) : "—",
+      train.train_number || "—",
+      train.service_date || "—",
+      fmtDelaySec(train.announced_delay_seconds),
+      fmtDelaySec(train.trip_updates_delay_seconds),
+      diffText,
+      agreeBadge,
     ];
     for (const cell of cells) {
       const td = document.createElement("td");
-      td.textContent = cell;
+      td.innerHTML = cell;
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
@@ -226,10 +268,10 @@ async function init() {
     state.index = await fetchJson("index.json");
     state.series = await fetchJson("series.json");
     try {
-      state.odometry = await fetchJson("odometry.json");
-      renderOdometry(state.odometry);
+      state.crosscheck = await fetchJson("crosscheck.json");
+      renderCrosscheck(state.crosscheck);
     } catch {
-      state.odometry = null;
+      state.crosscheck = null;
     }
   } catch (error) {
     document.querySelector("main").innerHTML =
