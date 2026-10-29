@@ -25,6 +25,7 @@ Suivi automatique des retards des trains SNCF entre **Rouen Rive Droite** et **P
 ```
 
 - **Source principale** : [API SNCF temps réel](https://numerique.sncf.com/startup/api/) (`api.sncf.com`, moteur Navitia) — départs de Rouen Rive Droite, retards mesurés à l'arrivée à Paris Saint-Lazare.
+- **Mode dégradé (sans token)** : si `SNCF_API_TOKEN` n'est pas défini, la page affiche les trains Rouen→Paris directement depuis le flux GTFS-RT TripUpdates, par **correspondance de corridor** : un train arrivant à Paris Saint-Lazare est identifié comme train Rouen→Paris si sa liste d'arrêts contient une gare du corridor Rouen–Paris (Oissel, Val-de-Reuil, Vernon, Mantes-la-Jolie, Poissy) avant Paris. Le retard affiché est le **retard à l'arrivée à Paris**. Une bannière jaune indique ce mode.
 - **Vérification croisée** : le flux [GTFS-RT TripUpdates](https://transport.data.gouv.fr/datasets/horaires-sncf) de la SNCF (**sans token**) est collecté en parallèle. Il contient les prédictions d'arrivée/départ **par gare** pour chaque train en circulation. Le retard à l'arrivée à Paris Saint-Lazare extrait de ce flux est comparé au retard annoncé par l'API SNCF (tolérance : 60 secondes). **Note** : la SNCF ne publie pas de positions GPS publiques pour ses trains ; le flux VehiclePositions initialement envisagé n'existe pas sur ce jeu de données. TripUpdates est l'alternative disponible.
 - **Détection de holds** : quand le retard à l'arrivée à une gare dépasse le retard au départ de la gare précédente, le train a été retenu en ligne — c'est la signature d'un arrêt/hold détecté sans GPS.
 - **Stockage** : un snapshot JSONL par jour dans `data/snapshots/YYYY-MM-DD.jsonl` et les profils TripUpdates dans `data/trip_updates/YYYY-MM-DD.jsonl`, versionnés dans le dépôt (pas de base de données).
@@ -89,11 +90,12 @@ jupyter notebook notebooks/tutorial.ipynb
 
 | Variable | Défaut | Description |
 |---|---|---|
-| `SNCF_API_TOKEN` | — (obligatoire pour `collect`) | Token de l'API SNCF |
+| `SNCF_API_TOKEN` | — (recommandé ; sans token, mode dégradé GTFS-RT TripUpdates) | Token de l'API SNCF |
 | `ROUENPARIS_ORIGIN_STOP_AREA` | `stop_area:SNCF:87411017` | Gare de départ (Rouen Rive Droite) |
 | `ROUENPARIS_DESTINATION_STOP_AREA` | `stop_area:SNCF:87271007` | Gare d'arrivée (Paris Saint-Lazare) |
 | `ROUENPARIS_ORIGIN_UIC8` | `87411017` | UIC 8 chiffres de Rouen (pour TripUpdates) |
 | `ROUENPARIS_DESTINATION_UIC8` | `87271007` | UIC 8 chiffres de Paris St-Lazare (pour TripUpdates) |
+| `ROUENPARIS_CORRIDOR_UIC8` | `87411017,87411207,87415877,87415620,87415604,87381509,87317586,87317263,87342014` | UIC 8 chiffres du corridor Rouen–Paris (mode dégradé) |
 | `ROUENPARIS_LOOKAHEAD_MINUTES` | `240` | Fenêtre de collecte des départs |
 | `ROUENPARIS_MIN_DELAY_MINUTES` | `5` | Seuil de comptabilisation d'un retard |
 | `ROUENPARIS_LINES` | (toutes) | Lignes à suivre, ex. `line:SNCF:K22,line:SNCF:K24` |
