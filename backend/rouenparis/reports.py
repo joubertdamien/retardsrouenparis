@@ -243,6 +243,7 @@ def build_records_from_trip_profiles(
     the scheduled departure; otherwise we fall back to the first
     corridor stop's departure time.
     """
+    destinations = set(settings.destination_uic8_all)
     corridor = set(settings.corridor_uic8)
     records = []
     seen: set[tuple] = set()
@@ -252,7 +253,7 @@ def build_records_from_trip_profiles(
         if not stops:
             continue
         destination = next(
-            (s for s in stops if s.get("uic8") == settings.destination_uic8), None
+            (s for s in stops if s.get("uic8") in destinations), None
         )
         if destination is None:
             continue
@@ -261,8 +262,9 @@ def build_records_from_trip_profiles(
         if arr_time is None and arr_delay is None:
             continue
         uics = [s.get("uic8") for s in stops]
+        dest_uic = destination.get("uic8")
         paris_idx = next(
-            (i for i, u in enumerate(uics) if u == settings.destination_uic8), -1
+            (i for i, u in enumerate(uics) if u == dest_uic), -1
         )
         if paris_idx <= 0:
             continue

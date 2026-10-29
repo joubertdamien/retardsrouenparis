@@ -13,6 +13,11 @@ PARIS_ST_LAZARE_STOP_AREA = "stop_area:SNCF:87271007"
 ROUEN_RIVE_DROITE_UIC8 = "87411017"
 PARIS_ST_LAZARE_UIC8 = "87271007"
 
+PARIS_ST_LAZARE_UIC8_ALL = (
+    "87271007",
+    "87384008",
+)
+
 ROUEN_PARIS_CORRIDOR_UIC8 = (
     "87411017",
     "87411207",
@@ -47,6 +52,7 @@ class Settings:
     destination_uic: str = PARIS_ST_LAZARE_UIC
     origin_uic8: str = ROUEN_RIVE_DROITE_UIC8
     destination_uic8: str = PARIS_ST_LAZARE_UIC8
+    destination_uic8_all: tuple = PARIS_ST_LAZARE_UIC8_ALL
     corridor_uic8: tuple = ROUEN_PARIS_CORRIDOR_UIC8
     data_dir: str = "data"
     site_dir: str = "site-build"
@@ -92,6 +98,14 @@ class Settings:
             destination_uic=env.get("ROUENPARIS_DESTINATION_UIC", PARIS_ST_LAZARE_UIC),
             origin_uic8=env.get("ROUENPARIS_ORIGIN_UIC8", ROUEN_RIVE_DROITE_UIC8),
             destination_uic8=env.get("ROUENPARIS_DESTINATION_UIC8", PARIS_ST_LAZARE_UIC8),
+            destination_uic8_all=tuple(
+                u.strip()
+                for u in env.get(
+                    "ROUENPARIS_DESTINATION_UIC8_ALL",
+                    ",".join(PARIS_ST_LAZARE_UIC8_ALL),
+                ).split(",")
+                if u.strip()
+            ),
             corridor_uic8=tuple(
                 u.strip()
                 for u in env.get(

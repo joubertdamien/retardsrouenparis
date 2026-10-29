@@ -92,6 +92,7 @@ def make_profile(trip_id: str, stops_data: list[dict], collected_at: datetime,
 
 ROUEN = "StopPoint:OCETrain TER-87411017"
 PARIS = "StopPoint:OCETrain TER-87271007"
+PARIS_TER = "StopPoint:OCETrain TER-87384008"
 VERNON = "StopPoint:OCETrain TER-87317586"
 MANTES = "StopPoint:OCETrain TER-87317263"
 OISSEL = "StopPoint:OCETrain TER-87411207"

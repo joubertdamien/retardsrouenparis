@@ -343,6 +343,34 @@ class TripUpdatesOnlyRecordsTest(unittest.TestCase):
         records = build_records_from_trip_profiles(profiles, self.settings, 300)
         self.assertEqual(len(records), 0)
 
+    def test_build_records_matches_paris_ter_uic8(self):
+        """Paris Saint-Lazare has two UIC8 codes in GTFS-RT: 87271007 (TGV)
+        and 87384008 (TER). A Rouen→Paris TER train ends at 87384008."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import OISSEL, PARIS_TER, ROUEN, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        profile = make_profile(
+            "OCESN13148F",
+            [
+                {"stop_id": ROUEN, "dep_delay": 600, "dep_time": int(base.timestamp())},
+                {"stop_id": OISSEL, "arr_delay": 600, "arr_time": int(base.timestamp()) + 600,
+                 "dep_delay": 600, "dep_time": int(base.timestamp()) + 660},
+                {"stop_id": PARIS_TER, "arr_delay": 900, "arr_time": int(base.timestamp()) + 5880},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 1)
+        r = records[0]
+        self.assertEqual(r.train_number, "13148")
+        self.assertEqual(r.delay_seconds, 900)
+        self.assertEqual(r.data_source, "gtfs_rt_trip_updates")
+        self.assertIsNotNone(r.actual_arrival)
+
     def test_build_records_deduplicates_same_trip(self):
         from rouenparis.reports import build_records_from_trip_profiles
         from test_trip_updates import OISSEL, PARIS, ROUEN, make_profile
