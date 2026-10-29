@@ -31,6 +31,7 @@ class TrainRecord:
     odometry_arrival: datetime | None = None
     odometry_delay_seconds: int | None = None
     trip_update_cross_check: dict | None = None
+    data_source: str = "sncf_api"
 
     @property
     def cancelled(self) -> bool:
@@ -76,6 +77,7 @@ class TrainRecord:
             )
             if self.trip_update_cross_check
             else None,
+            "data_source": self.data_source,
         }
 
 
@@ -196,6 +198,7 @@ def build_report(records: list[TrainRecord], period: str, start: date, settings:
         "period": {"type": period, "start": start.isoformat(), "end": end.isoformat()},
         "summary": summarize(period_records, settings.min_delay_minutes * 60),
         "trains": [record.to_dict() for record in period_records],
+        "data_source": period_records[0].data_source if period_records else "sncf_api",
     }
 
 
@@ -215,6 +218,127 @@ def list_periods(records: list[TrainRecord], period: str) -> list[date]:
     return sorted(starts)
 
 
+def build_records_from_trip_profiles(
+    trip_profiles: list[dict],
+    settings: Settings,
+    min_delay_seconds: int = 300,
+) -> list[TrainRecord]:
+    """Build TrainRecords from GTFS-RT TripUpdates profiles alone.
+
+    Used as a fallback when the SNCF API token is not available: the
+    TripUpdates feed (no token required) still provides per-stop delays
+    for every train currently running.
+
+    The GTFS-RT feed truncates stop lists for long trips — a Rouen→Paris
+    train (~90 min) will not show both Rouen and Paris in a single
+    snapshot because the feed only covers the next ~60 minutes.  We use
+    *corridor matching* instead: a train arriving at Paris Saint-Lazare
+    is a Rouen→Paris train if its stop list contains any station on the
+    Rouen–Paris corridor (Oissel, Val-de-Reuil, Vernon, Mantes-la-Jolie,
+    Poissy, …) before Paris.
+
+    For each matching profile we build a record whose primary delay is
+    the **arrival delay at Paris** (most meaningful for passengers).
+    When the profile also includes Rouen we use its departure time as
+    the scheduled departure; otherwise we fall back to the first
+    corridor stop's departure time.
+    """
+    corridor = set(settings.corridor_uic8)
+    records = []
+    seen: set[tuple] = set()
+    for profile in trip_profiles:
+        train_number = profile.get("train_number") or ""
+        stops = profile.get("stops", [])
+        if not stops:
+            continue
+        destination = next(
+            (s for s in stops if s.get("uic8") == settings.destination_uic8), None
+        )
+        if destination is None:
+            continue
+        arr_time = destination.get("arrival_time")
+        arr_delay = destination.get("arrival_delay")
+        if arr_time is None and arr_delay is None:
+            continue
+        uics = [s.get("uic8") for s in stops]
+        paris_idx = next(
+            (i for i, u in enumerate(uics) if u == settings.destination_uic8), -1
+        )
+        if paris_idx <= 0:
+            continue
+        corridor_stops_before = [
+            (i, s) for i, s in enumerate(stops[:paris_idx])
+            if s.get("uic8") in corridor
+        ]
+        if not corridor_stops_before:
+            continue
+        origin_stop = next(
+            (s for s in stops if s.get("uic8") == settings.origin_uic8), None
+        )
+        if origin_stop is not None:
+            dep_time = origin_stop.get("departure_time")
+            dep_delay = origin_stop.get("departure_delay")
+        else:
+            first_corridor_idx, first_corridor = corridor_stops_before[0]
+            dep_time = first_corridor.get("departure_time")
+            dep_delay = first_corridor.get("departure_delay")
+        if dep_time is None and arr_time is None:
+            continue
+        service_date = datetime.fromtimestamp(
+            arr_time or dep_time, tz=TZ
+        ).date()
+        key = (train_number, service_date, arr_time or dep_time)
+        if key in seen:
+            continue
+        seen.add(key)
+        scheduled_arrival_dt = (
+            datetime.fromtimestamp(arr_time - (arr_delay or 0), tz=TZ)
+            if arr_time
+            else None
+        )
+        actual_arrival_dt = (
+            datetime.fromtimestamp(arr_time, tz=TZ) if arr_time else None
+        )
+        if dep_time is not None:
+            scheduled_departure_dt = datetime.fromtimestamp(
+                dep_time - (dep_delay or 0), tz=TZ
+            )
+            actual_departure_dt = datetime.fromtimestamp(dep_time, tz=TZ)
+            scheduled_departure_str = scheduled_departure_dt.isoformat()
+        else:
+            scheduled_departure_dt = scheduled_arrival_dt
+            actual_departure_dt = None
+            scheduled_departure_str = (
+                scheduled_arrival_dt.isoformat() if scheduled_arrival_dt else ""
+            )
+        delay = arr_delay if arr_delay is not None else dep_delay
+        records.append(
+            TrainRecord(
+                train_number=train_number,
+                line_code="",
+                line_name="GTFS-RT",
+                direction="Paris Saint-Lazare",
+                service_date=service_date,
+                scheduled_departure=scheduled_departure_str,
+                scheduled_arrival=(
+                    scheduled_arrival_dt.isoformat() if scheduled_arrival_dt else None
+                ),
+                actual_departure=(
+                    actual_departure_dt.isoformat() if actual_departure_dt else None
+                ),
+                actual_arrival=(
+                    actual_arrival_dt.isoformat() if actual_arrival_dt else None
+                ),
+                delay_seconds=delay,
+                status="scheduled",
+                threshold=min_delay_seconds,
+                data_source="gtfs_rt_trip_updates",
+            )
+        )
+    records.sort(key=lambda record: record.scheduled_departure)
+    return records
+
+
 def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings) -> dict:
     snapshots = list(load_snapshots(data_dir))
     odometries = build_odometries(
@@ -223,13 +347,20 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
         min_stop_duration_seconds=settings.min_stop_duration_seconds,
     )
     trip_profiles = list(load_trip_profiles(data_dir))
-    records = build_train_records(
-        snapshots,
-        settings.min_delay_minutes * 60,
-        odometries=odometries,
-        settings=settings,
-        trip_profiles=trip_profiles,
-    )
+    if snapshots:
+        records = build_train_records(
+            snapshots,
+            settings.min_delay_minutes * 60,
+            odometries=odometries,
+            settings=settings,
+            trip_profiles=trip_profiles,
+        )
+        data_source = "sncf_api"
+    else:
+        records = build_records_from_trip_profiles(
+            trip_profiles, settings, settings.min_delay_minutes * 60
+        )
+        data_source = "gtfs_rt_trip_updates"
     site_path = Path(site_dir)
     reports_dir = site_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -241,6 +372,7 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
             "origin": "Rouen Rive Droite",
             "destination": "Paris Saint-Lazare",
         },
+        "data_source": data_source,
         "periods": [],
     }
 
@@ -333,6 +465,11 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
                     for record in records
                     if record.trip_update_cross_check is not None
                 ],
+                "trip_updates_only_trains": [
+                    record.to_dict()
+                    for record in records
+                    if record.data_source == "gtfs_rt_trip_updates"
+                ],
             },
             ensure_ascii=False,
             indent=2,
@@ -341,6 +478,14 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
         encoding="utf-8",
     )
 
+    tu_source_trains = sum(1 for r in records if r.data_source == "gtfs_rt_trip_updates")
+    tu_delayed = sum(
+        1
+        for r in records
+        if r.data_source == "gtfs_rt_trip_updates"
+        and r.delay_seconds is not None
+        and r.delay_seconds >= settings.min_delay_minutes * 60
+    )
     index["days_tracked"] = len(series)
     index["odometry"] = {
         "trips_tracked": len(odometries),
@@ -351,6 +496,12 @@ def generate_all(data_dir: str | Path, site_dir: str | Path, settings: Settings)
         "trips_in_feed": len({p.get("trip_id") for p in trip_profiles}),
         "trains_cross_checked": tu_checked,
         "delays_agreeing": tu_agreeing,
+    }
+    index["trip_updates_only"] = {
+        "active": data_source == "gtfs_rt_trip_updates",
+        "trains_from_trip_updates": tu_source_trains,
+        "delayed_from_trip_updates": tu_delayed,
+        "trips_in_feed": len({p.get("trip_id") for p in trip_profiles}),
     }
     (site_path / "index.json").write_text(
         json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

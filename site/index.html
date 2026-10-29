@@ -12,6 +12,11 @@
     <p class="subtitle">Suivi des retards des trains SNCF (TER Normandie &amp; Intercités), basé sur l'API temps réel SNCF.</p>
   </header>
 
+  <div id="source-banner" class="banner" style="display:none">
+    <span id="source-badge" class="badge muted">—</span>
+    <span id="source-message"></span>
+  </div>
+
   <nav class="tabs" role="tablist">
     <button class="tab active" data-period="daily" role="tab">Journalier</button>
     <button class="tab" data-period="weekly" role="tab">Hebdomadaire</button>
@@ -75,7 +80,7 @@
   </main>
 
   <footer>
-    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT TripUpdates (transport.data.gouv.fr, sans token). Un retard est comptabilisé à partir de 5 minutes. La <strong>vérification croisée</strong> compare le retard annoncé par l'API SNCF avec le retard à l'arrivée à Paris Saint-Lazare extrait indépendamment du flux GTFS-RT TripUpdates (tolérance : 60 secondes).</p>
+    <p class="muted">Données collectées automatiquement via l'API SNCF (api.sncf.com) et le flux GTFS-RT TripUpdates (transport.data.gouv.fr, sans token). Un retard est comptabilisé à partir de 5 minutes. En l'absence de token API SNCF, les retards affichés proviennent du flux GTFS-RT TripUpdates. La <strong>vérification croisée</strong> compare le retard annoncé par l'API SNCF avec le retard à l'arrivée à Paris Saint-Lazare extrait indépendamment du flux GTFS-RT TripUpdates (tolérance : 60 secondes).</p>
   </footer>
 
   <script src="app.js"></script>

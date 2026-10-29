@@ -94,6 +94,9 @@ ROUEN = "StopPoint:OCETrain TER-87411017"
 PARIS = "StopPoint:OCETrain TER-87271007"
 VERNON = "StopPoint:OCETrain TER-87317586"
 MANTES = "StopPoint:OCETrain TER-87317263"
+OISSEL = "StopPoint:OCETrain TER-87411207"
+VALDEREUIL = "StopPoint:OCETrain TER-87415877"
+POISSY = "StopPoint:OCETrain TER-87342014"
 
 
 class TrainNumberExtractionTest(unittest.TestCase):

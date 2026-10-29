@@ -24,6 +24,14 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(settings.origin_uic8, "87411017")
         self.assertEqual(settings.destination_uic8, "87271007")
 
+    def test_corridor_uic8_defaults(self):
+        from rouenparis.config import ROUEN_PARIS_CORRIDOR_UIC8
+        settings = Settings(api_token="x")
+        self.assertEqual(settings.corridor_uic8, ROUEN_PARIS_CORRIDOR_UIC8)
+        self.assertIn("87411017", settings.corridor_uic8)
+        self.assertIn("87342014", settings.corridor_uic8)
+        self.assertNotIn("87271007", settings.corridor_uic8)
+
     def test_trip_updates_url_default(self):
         settings = Settings(api_token="x")
         self.assertEqual(settings.gtfs_rt_trip_updates_url, DEFAULT_GTFS_RT_TRIP_UPDATES_URL)

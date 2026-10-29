@@ -70,6 +70,12 @@ tr.cancelled td { color: #777; text-decoration: line-through; }
 .badge.delayed { background: #fce8e6; color: var(--bad); }
 .badge.cancelled { background: #eee; color: #555; }
 .badge.muted { background: #f0f1f3; color: #888; }
+.badge.warn { background: #fef3c7; color: #92400e; }
+
+.banner { display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem;
+          border-radius: 6px; margin-bottom: 1rem; font-size: .9rem; }
+.banner.ok { background: #e6f4ea; color: #14532d; }
+.banner.warn { background: #fef3c7; color: #78350f; }
 
 #crosscheck-section { margin-top: 2rem; }
 #crosscheck-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .9rem; }

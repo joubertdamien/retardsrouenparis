@@ -62,7 +62,21 @@ def collect_positions(settings: Settings) -> int:
 
 
 def cmd_collect(args) -> int:
-    settings = Settings.from_env()
+    try:
+        settings = Settings.from_env()
+    except RuntimeError:
+        logger.warning(
+            "SNCF_API_TOKEN not set — collecting GTFS-RT TripUpdates only "
+            "(no API SNCF departures). The page will show delayed trains "
+            "from the TripUpdates feed."
+        )
+        settings = Settings.from_env(require_token=False)
+        collect_trip_updates(settings)
+        try:
+            collect_positions(settings)
+        except Exception as error:
+            logger.warning("position collection failed: %s", error)
+        return 0
     client = SncfClient(settings)
     now = datetime.now(tz=TZ)
     if args.at:
@@ -70,12 +84,17 @@ def cmd_collect(args) -> int:
         now = naive.replace(tzinfo=TZ)
     for index in range(args.count):
         started = datetime.now(tz=TZ)
-        observations = client.fetch_departures(started)
-        snapshot = Snapshot(collected_at=started, trains=observations)
-        path = append_snapshot(settings.data_dir, snapshot)
-        logger.info(
-            "snapshot %d: %d departures stored in %s", index + 1, len(observations), path
-        )
+        try:
+            observations = client.fetch_departures(started)
+        except Exception as error:
+            logger.warning("SNCF API fetch failed: %s — falling back to TripUpdates only", error)
+            observations = []
+        if observations:
+            snapshot = Snapshot(collected_at=started, trains=observations)
+            path = append_snapshot(settings.data_dir, snapshot)
+            logger.info(
+                "snapshot %d: %d departures stored in %s", index + 1, len(observations), path
+            )
         try:
             collect_trip_updates(settings)
         except Exception as error:

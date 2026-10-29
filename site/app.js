@@ -75,6 +75,9 @@ function renderSummary(summary) {
 }
 
 function crossCheckBadge(train) {
+  if (train.data_source === "gtfs_rt_trip_updates") {
+    return '<span class="badge muted">GTFS-RT</span>';
+  }
   if (train.delay_cross_check_agrees === null || train.delay_cross_check_agrees === undefined) {
     return '<span class="badge muted">non vérifié</span>';
   }
@@ -82,6 +85,30 @@ function crossCheckBadge(train) {
     return '<span class="badge ok">concordant</span>';
   }
   return '<span class="badge delayed">écart détecté</span>';
+}
+
+function renderSourceBanner(index) {
+  const banner = document.getElementById("source-banner");
+  const badge = document.getElementById("source-badge");
+  const message = document.getElementById("source-message");
+  const source = index.data_source || "sncf_api";
+  const tuOnly = index.trip_updates_only || {};
+  if (source === "gtfs_rt_trip_updates" || tuOnly.active) {
+    banner.style.display = "flex";
+    banner.className = "banner warn";
+    badge.textContent = "GTFS-RT TripUpdates";
+    badge.className = "badge warn";
+    const n = tuOnly.trains_from_trip_updates || 0;
+    const d = tuOnly.delayed_from_trip_updates || 0;
+    message.textContent = `Token API SNCF non disponible — ${n} trains suivis, ${d} en retard (≥ 5 min), données issues du flux GTFS-RT TripUpdates (sans token).`;
+  } else {
+    banner.style.display = "flex";
+    banner.className = "banner ok";
+    badge.textContent = "API SNCF + GTFS-RT";
+    badge.className = "badge ok";
+    const cc = index.cross_check || {};
+    message.textContent = `Données API SNCF temps réel${cc.trains_cross_checked ? ` · ${cc.delays_agreeing}/${cc.trains_cross_checked} retards vérifiés par GTFS-RT` : ""}.`;
+  }
 }
 
 function renderTrains(trains) {
@@ -278,6 +305,7 @@ async function init() {
       `<p class="card">Aucune donnée disponible pour le moment. ${error.message}</p>`;
     return;
   }
+  renderSourceBanner(state.index);
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
