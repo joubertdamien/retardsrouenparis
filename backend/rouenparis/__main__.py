@@ -12,9 +12,39 @@ from .positions import append_position_records
 from .reports import generate_all
 from .sncf_client import SncfClient
 from .storage import TZ, Snapshot, append_snapshot
+from .trip_storage import append_trip_profiles
+from .trip_updates import TripUpdatesClient
 from .vehicle_positions import VehiclePositionsClient
 
 logger = logging.getLogger(__name__)
+
+
+def collect_trip_updates(settings: Settings) -> int:
+    """Collect the GTFS-RT TripUpdates feed and store profiles for our route.
+
+    The TripUpdates feed covers trains running in the next ~60 minutes.
+    We store profiles of trips that serve *both* Rouen Rive Droite and
+    Paris Saint-Lazare, plus trips serving either station (so we can track
+    partial trips too).
+    """
+    if not settings.track_trip_updates:
+        logger.info("trip-updates tracking disabled (ROUENPARIS_TRACK_TRIP_UPDATES=0)")
+        return 0
+    client = TripUpdatesClient(settings)
+    origin = settings.origin_uic8
+    destination = settings.destination_uic8
+    profiles = client.fetch_profiles()
+    selected = []
+    for profile in profiles:
+        uics = {s.uic8 for s in profile.stops if s.uic8}
+        if origin in uics or destination in uics:
+            selected.append(profile)
+    if not selected:
+        logger.warning("no TripUpdates profiles matched Rouen/Paris Saint-Lazare")
+        return 0
+    path = append_trip_profiles(settings.data_dir, selected)
+    logger.info("%d trip profiles stored in %s", len(selected), path)
+    return len(selected)
 
 
 def collect_positions(settings: Settings) -> int:
@@ -32,7 +62,21 @@ def collect_positions(settings: Settings) -> int:
 
 
 def cmd_collect(args) -> int:
-    settings = Settings.from_env()
+    try:
+        settings = Settings.from_env()
+    except RuntimeError:
+        logger.warning(
+            "SNCF_API_TOKEN not set — collecting GTFS-RT TripUpdates only "
+            "(no API SNCF departures). The page will show delayed trains "
+            "from the TripUpdates feed."
+        )
+        settings = Settings.from_env(require_token=False)
+        collect_trip_updates(settings)
+        try:
+            collect_positions(settings)
+        except Exception as error:
+            logger.warning("position collection failed: %s", error)
+        return 0
     client = SncfClient(settings)
     now = datetime.now(tz=TZ)
     if args.at:
@@ -40,18 +84,33 @@ def cmd_collect(args) -> int:
         now = naive.replace(tzinfo=TZ)
     for index in range(args.count):
         started = datetime.now(tz=TZ)
-        observations = client.fetch_departures(started)
-        snapshot = Snapshot(collected_at=started, trains=observations)
-        path = append_snapshot(settings.data_dir, snapshot)
-        logger.info(
-            "snapshot %d: %d departures stored in %s", index + 1, len(observations), path
-        )
+        try:
+            observations = client.fetch_departures(started)
+        except Exception as error:
+            logger.warning("SNCF API fetch failed: %s — falling back to TripUpdates only", error)
+            observations = []
+        if observations:
+            snapshot = Snapshot(collected_at=started, trains=observations)
+            path = append_snapshot(settings.data_dir, snapshot)
+            logger.info(
+                "snapshot %d: %d departures stored in %s", index + 1, len(observations), path
+            )
+        try:
+            collect_trip_updates(settings)
+        except Exception as error:
+            logger.warning("trip-updates collection failed: %s", error)
         try:
             collect_positions(settings)
         except Exception as error:
             logger.warning("position collection failed: %s", error)
         if index + 1 < args.count:
             time.sleep(args.interval_seconds)
+    return 0
+
+
+def cmd_collect_trip_updates(args) -> int:
+    settings = Settings.from_env(require_token=False)
+    collect_trip_updates(settings)
     return 0
 
 
@@ -118,6 +177,12 @@ def build_parser() -> argparse.ArgumentParser:
     all_cmd.add_argument("--count", type=int, default=1)
     all_cmd.add_argument("--interval-seconds", type=int, default=900)
     all_cmd.set_defaults(func=cmd_all)
+
+    trip_updates = subparsers.add_parser(
+        "collect-trip-updates",
+        help="fetch GTFS-RT TripUpdates profiles for Rouen/Paris (no API token needed)",
+    )
+    trip_updates.set_defaults(func=cmd_collect_trip_updates)
 
     positions = subparsers.add_parser(
         "collect-positions",
