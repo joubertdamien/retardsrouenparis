@@ -110,6 +110,22 @@ class TrainNumberExtractionTest(unittest.TestCase):
         self.assertIsNone(train_number_from_trip_id("UNKNOWN"))
 
 
+class OriginUic8ExtractionTest(unittest.TestCase):
+    def test_extracts_origin_from_full_trip_id(self):
+        from rouenparis.trip_updates import origin_uic8_from_trip_id
+        tid = "OCESN13148F1187_F:TER:FR:Line::97E911FA-C8F2-4861-AD3C-C36CF4750A49::87411017:87384008:7:1849:20261211"
+        self.assertEqual(origin_uic8_from_trip_id(tid), "87411017")
+
+    def test_extracts_origin_le_havre(self):
+        from rouenparis.trip_updates import origin_uic8_from_trip_id
+        tid = "OCESN3126F1187_F:TER:FR:Line::468B44B7-C327-4154-B85E-25C67C32B61E::87413013:87384008:6:1835:20261211"
+        self.assertEqual(origin_uic8_from_trip_id(tid), "87413013")
+
+    def test_returns_none_for_simple_id(self):
+        from rouenparis.trip_updates import origin_uic8_from_trip_id
+        self.assertIsNone(origin_uic8_from_trip_id("OCESN3125F"))
+
+
 class StopPassageTest(unittest.TestCase):
     def test_uic8_extraction(self):
         stop = StopPassage(stop_id=ROUEN, stop_sequence=0, arrival_delay=0, arrival_time=100,

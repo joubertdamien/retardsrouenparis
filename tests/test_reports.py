@@ -293,6 +293,77 @@ class TripUpdatesOnlyRecordsTest(unittest.TestCase):
         records = build_records_from_trip_profiles(profiles, self.settings, 300)
         self.assertEqual(len(records), 0)
 
+    def test_build_records_skips_poissy_only_lille_train(self):
+        """A train from Lille/Dunkerque that only shares Poissy with the
+        Rouen line must NOT be shown (Poissy is not Rouen-specific)."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import PARIS, POISSY, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        # trip_id origin = Lille (87286005), stops: Lille → Poissy → Paris
+        profile = make_profile(
+            "OCESN7312F1187_F:TER:FR:Line::AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE::87286005:87271007:5:100:20261028",
+            [
+                {"stop_id": "StopPoint:OCETrain TER-87286005", "dep_delay": 0,
+                 "dep_time": int(base.timestamp())},
+                {"stop_id": POISSY, "arr_delay": 0, "arr_time": int(base.timestamp()) + 2400,
+                 "dep_delay": 0, "dep_time": int(base.timestamp()) + 2460},
+                {"stop_id": PARIS, "arr_delay": 300, "arr_time": int(base.timestamp()) + 3600},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 0)
+
+    def test_build_records_accepts_truncated_rouen_axis_origin(self):
+        """A Le Havre→Paris train whose feed-truncated stop list only shows
+        Poissy before Paris is still accepted because its trip_id origin
+        (Le Havre, 87413013) is on the Rouen axis."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import PARIS, POISSY, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        profile = make_profile(
+            "OCESN3106F1187_F:TER:FR:Line::11111111-2222-3333-4444-555555555555::87413013:87384008:6:100:20261028",
+            [
+                {"stop_id": POISSY, "dep_delay": 0, "dep_time": int(base.timestamp())},
+                {"stop_id": PARIS, "arr_delay": 300, "arr_time": int(base.timestamp()) + 1200},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].origin_station, "Le Havre")
+        self.assertEqual(records[0].delay_seconds, 300)
+
+    def test_build_records_skips_non_rouen_axis_origin_poissy_only(self):
+        """A Mantes-origin train stopping only at Poissy before Paris is
+        NOT a Rouen-line train (Mantes is not on the Rouen axis) — it is
+        excluded even though Mantes is a corridor station."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import PARIS, POISSY, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        profile = make_profile(
+            "OCESN16382F1187_F:TER:FR:Line::11111111-2222-3333-4444-555555555555::87317263:87271007:9:100:20261028",
+            [
+                {"stop_id": POISSY, "dep_delay": 0, "dep_time": int(base.timestamp())},
+                {"stop_id": PARIS, "arr_delay": 0, "arr_time": int(base.timestamp()) + 2400},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 0)
+
     def test_generate_all_without_snapshots_uses_trip_updates(self):
         from rouenparis.reports import generate_all
 
@@ -370,6 +441,31 @@ class TripUpdatesOnlyRecordsTest(unittest.TestCase):
         self.assertEqual(r.delay_seconds, 900)
         self.assertEqual(r.data_source, "gtfs_rt_trip_updates")
         self.assertIsNotNone(r.actual_arrival)
+
+    def test_build_records_extracts_origin_station(self):
+        """The origin station name is extracted from the trip_id's origin UIC8."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import OISSEL, PARIS_TER, ROUEN, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        # trip_id with origin=87411017 (Rouen) and dest=87384008 (Paris TER)
+        profile = make_profile(
+            "OCESN13148F1187_F:TER:FR:Line::97E911FA-C8F2-4861-AD3C-C36CF4750A49::87411017:87384008:7:1849:20261028",
+            [
+                {"stop_id": ROUEN, "dep_delay": 0, "dep_time": int(base.timestamp())},
+                {"stop_id": OISSEL, "arr_delay": 0, "arr_time": int(base.timestamp()) + 600,
+                 "dep_delay": 0, "dep_time": int(base.timestamp()) + 660},
+                {"stop_id": PARIS_TER, "arr_delay": 300, "arr_time": int(base.timestamp()) + 5880},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].origin_station, "Rouen Rive Droite")
+        self.assertEqual(records[0].to_dict()["origin_station"], "Rouen Rive Droite")
 
     def test_build_records_deduplicates_same_trip(self):
         from rouenparis.reports import build_records_from_trip_profiles

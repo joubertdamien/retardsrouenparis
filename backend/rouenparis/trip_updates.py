@@ -116,6 +116,10 @@ class TripProfile:
     def train_number(self) -> str | None:
         return train_number_from_trip_id(self.trip_id)
 
+    @property
+    def origin_uic8(self) -> str | None:
+        return origin_uic8_from_trip_id(self.trip_id)
+
     def stop_by_uic(self, uic8: str) -> StopPassage | None:
         for stop in self.stops:
             if stop.uic8 == uic8:
@@ -133,6 +137,7 @@ class TripProfile:
             "feed_timestamp": self.feed_timestamp,
             "update_delay": self.update_delay,
             "train_number": self.train_number,
+            "origin_uic8": self.origin_uic8,
             "stops": [s.to_dict() for s in self.stops],
             "collected_at": self.collected_at,
         }
@@ -198,6 +203,7 @@ def detect_hold_events(profile: TripProfile) -> list[HoldEvent]:
 
 
 _TRAIN_NUMBER_RE = re.compile(r"(\d{4,6})")
+_UIC_PAIR_RE = re.compile(r"(\d{8}):(\d{8})")
 
 
 def train_number_from_trip_id(trip_id: str) -> str | None:
@@ -206,6 +212,16 @@ def train_number_from_trip_id(trip_id: str) -> str | None:
     SNCF trip ids embed the commercial number, e.g. ``OCESN7546F`` -> ``7546``.
     """
     match = _TRAIN_NUMBER_RE.search(trip_id)
+    return match.group(1) if match else None
+
+
+def origin_uic8_from_trip_id(trip_id: str) -> str | None:
+    """Extract the origin station UIC8 from a SNCF GTFS-RT trip_id.
+
+    SNCF trip ids embed ``:<origin_uic8>:<dest_uic8>:`` e.g.
+    ``OCESN13148F...::87411017:87384008:7:1849:20261211`` → origin ``87411017``.
+    """
+    match = _UIC_PAIR_RE.search(trip_id)
     return match.group(1) if match else None
 
 

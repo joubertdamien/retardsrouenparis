@@ -32,6 +32,7 @@ class TrainRecord:
     odometry_delay_seconds: int | None = None
     trip_update_cross_check: dict | None = None
     data_source: str = "sncf_api"
+    origin_station: str | None = None
 
     @property
     def cancelled(self) -> bool:
@@ -78,6 +79,7 @@ class TrainRecord:
             if self.trip_update_cross_check
             else None,
             "data_source": self.data_source,
+            "origin_station": self.origin_station,
         }
 
 
@@ -245,6 +247,11 @@ def build_records_from_trip_profiles(
     """
     destinations = set(settings.destination_uic8_all)
     corridor = set(settings.corridor_uic8)
+    # Poissy (87342014) is shared with the Lille/Dunkerque direction, so it
+    # alone is not enough to prove a train came via Rouen.  Require at least
+    # one Rouen-specific corridor station (Oissel, Val-de-Reuil, Vernon,
+    # Mantes, …) OR Rouen itself in the stop list.
+    rouen_specific = corridor - {"87342014"}
     records = []
     seen: set[tuple] = set()
     for profile in trip_profiles:
@@ -272,7 +279,16 @@ def build_records_from_trip_profiles(
             (i, s) for i, s in enumerate(stops[:paris_idx])
             if s.get("uic8") in corridor
         ]
-        if not corridor_stops_before:
+        rouen_line = any(
+            s.get("uic8") in rouen_specific for _, s in corridor_stops_before
+        )
+        # A train whose trip_id embeds an origin UIC8 on the Rouen axis
+        # (Rouen, Le Havre, Yvetot, …) is a Rouen-line train even if the
+        # feed truncated its stop list before the corridor stations.
+        origin_uic8 = profile.get("origin_uic8")
+        if not rouen_line and origin_uic8 in settings.rouen_axis_origins_uic8:
+            rouen_line = True
+        if not rouen_line:
             continue
         origin_stop = next(
             (s for s in stops if s.get("uic8") == settings.origin_uic8), None
@@ -314,12 +330,16 @@ def build_records_from_trip_profiles(
                 scheduled_arrival_dt.isoformat() if scheduled_arrival_dt else ""
             )
         delay = arr_delay if arr_delay is not None else dep_delay
+        origin_name = settings.station_names_uic8.get(origin_uic8) if origin_uic8 else None
+        if origin_name is None and origin_stop is not None:
+            origin_name = "Rouen Rive Droite"
         records.append(
             TrainRecord(
                 train_number=train_number,
                 line_code="",
                 line_name="GTFS-RT",
                 direction="Paris Saint-Lazare",
+                origin_station=origin_name,
                 service_date=service_date,
                 scheduled_departure=scheduled_departure_str,
                 scheduled_arrival=(

@@ -131,6 +131,7 @@ function renderTrains(trains) {
     const cells = [
       train.train_number || "—",
       train.line_code || train.line_name || "—",
+      train.origin_station || "—",
       train.direction || "—",
       fmtTime(train.scheduled_departure),
       fmtTime(train.actual_departure),
