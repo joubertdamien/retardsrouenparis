@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 DEFAULT_API_BASE = "https://api.sncf.com/v1"
 DEFAULT_COVERAGE = "sncf"
@@ -30,6 +30,41 @@ ROUEN_PARIS_CORRIDOR_UIC8 = (
     "87342014",
 )
 
+# UIC8 of stations on the Rouen axis: trains originating there run
+# through Rouen towards Paris (Rouen, Le Havre, Dieppe, Yvetot, …).
+ROUEN_AXIS_ORIGINS_UIC8 = (
+    "87411017",  # Rouen Rive Droite
+    "87413013",  # Le Havre
+    "87415018",  # Dieppe
+    "87413385",  # Yvetot
+    "87444877",  # Cherbourg
+    "87444000",  # Caen
+    "87444372",  # Deauville / Trouville-Deauville
+)
+
+# UIC8 → station name, for displaying the train origin on the page.
+# Covers the main origins of trains passing through Rouen towards Paris.
+STATION_NAMES_UIC8 = {
+    "87411017": "Rouen Rive Droite",
+    "87413013": "Le Havre",
+    "87415018": "Dieppe",
+    "87413385": "Yvetot",
+    "87384008": "Paris Saint-Lazare",
+    "87271007": "Paris Saint-Lazare",
+    "87313874": "Amiens",
+    "87444000": "Caen",
+    "87444372": "Deauville",
+    "87444877": "Cherbourg",
+    "87317586": "Vernon",
+    "87317263": "Mantes-la-Jolie",
+    "87342014": "Poissy",
+    "87411207": "Oissel",
+    "87415877": "Val-de-Reuil",
+    "87415620": "Gaillon-Aubevoye",
+    "87415604": "Vernon-Giverny",
+    "87381509": "Mantes-la-Jolie",
+}
+
 LOCAL_TZ = "Europe/Paris"
 
 DEFAULT_GTFS_RT_TRIP_UPDATES_URL = (
@@ -54,6 +89,8 @@ class Settings:
     destination_uic8: str = PARIS_ST_LAZARE_UIC8
     destination_uic8_all: tuple = PARIS_ST_LAZARE_UIC8_ALL
     corridor_uic8: tuple = ROUEN_PARIS_CORRIDOR_UIC8
+    rouen_axis_origins_uic8: tuple = ROUEN_AXIS_ORIGINS_UIC8
+    station_names_uic8: dict = field(default_factory=lambda: dict(STATION_NAMES_UIC8))
     data_dir: str = "data"
     site_dir: str = "site-build"
     lookahead_minutes: int = 240

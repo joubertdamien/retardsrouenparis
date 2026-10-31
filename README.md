@@ -9,7 +9,7 @@ Suivi automatique des retards des trains SNCF entre **Rouen Rive Droite** et **P
 ```
 ┌─────────────────────┐      ┌──────────────────────────────┐      ┌───────────────────┐
 │ GitHub Actions (cron)│      │ Backend Python (stdlib only) │      │ GitHub Pages      │
-│ toutes les 15 min    │ ───► │ collecte API SNCF temps réel │ ───► │ site statique     │
+│ toutes les heures    │ ───► │ collecte API SNCF temps réel │ ───► │ site statique     │
 │                      │      │ + rapports JSON              │      │ (rapports J/W/M)  │
 └─────────────────────┘      └──────────────────────────────┘      └───────────────────┘
          │ commits les snapshots JSONL dans data/
@@ -48,7 +48,7 @@ Suivi automatique des retards des trains SNCF entre **Rouen Rive Droite** et **P
 
 ### 3. Lancer la collecte
 
-Le workflow `collect.yml` tourne automatiquement toutes les 15 minutes (05:00–23:45, heure de Paris). Déclenchez-le manuellement via l'onglet **Actions → Collect SNCF departures → Run workflow**.
+Le workflow `collect.yml` tourne automatiquement **toutes les heures** (05:05–22:05, heure de Paris). Déclenchez-le manuellement via l'onglet **Actions → Collect SNCF departures → Run workflow**.
 
 ## Utilisation en local
 
