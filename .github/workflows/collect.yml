@@ -2,8 +2,9 @@ name: Collect SNCF departures
 
 on:
   schedule:
-    # Every hour, 05:00–23:00 Europe/Paris (UTC+1/UTC+2)
-    - cron: "5 4-22 * * *"
+    # Every 15 min, 05:00–23:45 Europe/Paris. 4 triggers/hour because GitHub often skips
+    # delayed cron runs; with 4 slots we still get several executions per hour.
+    - cron: "5,20,35,50 4-22 * * *"
   workflow_dispatch:
   push:
     branches: [main]
