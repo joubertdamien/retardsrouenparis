@@ -42,6 +42,16 @@ ROUEN_AXIS_ORIGINS_UIC8 = (
     "87444372",  # Deauville / Trouville-Deauville
 )
 
+# Origins to EXCLUDE: a train starting at Mantes-la-Jolie only runs
+# Mantes → Poissy → Paris and never calls at Rouen, even though Mantes
+# is on the corridor list (Rouen→Paris trains also stop there).
+# Both UIC8 codes are used for Mantes-la-Jolie in the GTFS-RT feed.
+MANTES_LA_JOLIE_UIC8_ALL = (
+    "87317263",
+    "87381509",
+)
+EXCLUDED_ORIGINS_UIC8 = MANTES_LA_JOLIE_UIC8_ALL
+
 # UIC8 → station name, for displaying the train origin on the page.
 # Covers the main origins of trains passing through Rouen towards Paris.
 STATION_NAMES_UIC8 = {
@@ -90,6 +100,7 @@ class Settings:
     destination_uic8_all: tuple = PARIS_ST_LAZARE_UIC8_ALL
     corridor_uic8: tuple = ROUEN_PARIS_CORRIDOR_UIC8
     rouen_axis_origins_uic8: tuple = ROUEN_AXIS_ORIGINS_UIC8
+    excluded_origins_uic8: tuple = EXCLUDED_ORIGINS_UIC8
     station_names_uic8: dict = field(default_factory=lambda: dict(STATION_NAMES_UIC8))
     data_dir: str = "data"
     site_dir: str = "site-build"
