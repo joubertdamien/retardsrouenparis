@@ -225,6 +225,12 @@ def origin_uic8_from_trip_id(trip_id: str) -> str | None:
     return match.group(1) if match else None
 
 
+def is_excluded_origin_trip(trip_id: str, excluded_uic8) -> bool:
+    """True when the trip_id's embedded origin UIC8 is in the exclusion set
+    (e.g. Mantes-la-Jolie: those trains never call at Rouen)."""
+    return origin_uic8_from_trip_id(trip_id) in set(excluded_uic8 or ())
+
+
 class TripUpdatesClient:
     """Fetches the SNCF GTFS-RT TripUpdates feed (no API token required).
 

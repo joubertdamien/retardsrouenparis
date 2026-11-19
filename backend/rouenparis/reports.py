@@ -253,11 +253,18 @@ def build_records_from_trip_profiles(
     # Mantes, …) OR Rouen itself in the stop list.
     rouen_specific = corridor - {"87342014"}
     records = []
+    excluded_origins = set(settings.excluded_origins_uic8)
     seen: set[tuple] = set()
     for profile in trip_profiles:
         train_number = profile.get("train_number") or ""
         stops = profile.get("stops", [])
         if not stops:
+            continue
+        # Exclude trains whose origin is blacklisted (e.g. Mantes-la-Jolie:
+        # Mantes → Paris never calls at Rouen even though Mantes is a
+        # corridor station).
+        origin_uic8 = profile.get("origin_uic8")
+        if origin_uic8 in excluded_origins:
             continue
         destination = next(
             (s for s in stops if s.get("uic8") in destinations), None
@@ -285,7 +292,6 @@ def build_records_from_trip_profiles(
         # A train whose trip_id embeds an origin UIC8 on the Rouen axis
         # (Rouen, Le Havre, Yvetot, …) is a Rouen-line train even if the
         # feed truncated its stop list before the corridor stations.
-        origin_uic8 = profile.get("origin_uic8")
         if not rouen_line and origin_uic8 in settings.rouen_axis_origins_uic8:
             rouen_line = True
         if not rouen_line:

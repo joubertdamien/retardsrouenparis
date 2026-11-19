@@ -17,7 +17,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .storage import TZ
-from .trip_updates import TripProfile, cross_check_arrival_delay
+from .trip_updates import TripProfile, cross_check_arrival_delay, is_excluded_origin_trip
 
 
 def _trip_updates_path(data_dir: Path, day: date) -> Path:
@@ -56,6 +56,44 @@ def load_trip_profiles(data_dir: str | Path, start: date | None = None, end: dat
                 line = line.strip()
                 if line:
                     yield json.loads(line)
+
+
+def prune_excluded_profiles(
+    data_dir: str | Path, excluded_origins_uic8
+) -> dict[str, int]:
+    """Rewrite every ``data/trip_updates/*.jsonl`` file, dropping profiles
+    whose trip_id origin UIC8 is in ``excluded_origins_uic8``.
+
+    Used to clean the data history after an origin is blacklisted.
+    Returns ``{filename: removed_count}`` for the files that changed.
+    The pre-prune state is preserved in git history / backup refs.
+    """
+    base = Path(data_dir) / "trip_updates"
+    removed: dict[str, int] = {}
+    if not base.is_dir():
+        return removed
+    for path in sorted(base.glob("*.jsonl")):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        kept, dropped = [], 0
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                kept.append(line)
+                continue
+            if is_excluded_origin_trip(record.get("trip_id", ""), excluded_origins_uic8):
+                dropped += 1
+            else:
+                kept.append(line)
+        if dropped:
+            path.write_text(
+                "\n".join(kept) + ("\n" if kept else ""), encoding="utf-8"
+            )
+            removed[path.name] = dropped
+    return removed
 
 
 def group_profiles_by_trip(records) -> dict[str, list[dict]]:

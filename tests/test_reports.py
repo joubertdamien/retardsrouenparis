@@ -364,6 +364,56 @@ class TripUpdatesOnlyRecordsTest(unittest.TestCase):
         records = build_records_from_trip_profiles(profiles, self.settings, 300)
         self.assertEqual(len(records), 0)
 
+    def test_build_records_excludes_blacklisted_origin_with_corridor_stops(self):
+        """A Mantes-la-Jolie-origin train whose stop list includes Mantes
+        (a Rouen-specific corridor station) before Paris must still be
+        excluded — its origin is blacklisted because it never calls at
+        Rouen. This is the live case of trains 1635x/163xx."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import PARIS, POISSY, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        mantes = "StopPoint:OCETrain TER-87317263"
+        profile = make_profile(
+            "OCESN16354F1187_F:TER:FR:Line::11111111-2222-3333-4444-555555555555::87317263:87271007:9:100:20261028",
+            [
+                {"stop_id": mantes, "dep_delay": 0, "dep_time": int(base.timestamp())},
+                {"stop_id": POISSY, "arr_delay": 0, "arr_time": int(base.timestamp()) + 2400,
+                 "dep_delay": 0, "dep_time": int(base.timestamp()) + 2460},
+                {"stop_id": PARIS, "arr_delay": 600, "arr_time": int(base.timestamp()) + 3600},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 0)
+
+    def test_build_records_keeps_rouen_axis_origin_despite_exclusion_list(self):
+        """Le Havre-origin trains (Rouen axis) are NOT excluded by the
+        Mantes-la-Jolie blacklist."""
+        from rouenparis.reports import build_records_from_trip_profiles
+        from test_trip_updates import OISSEL, PARIS_TER, ROUEN, make_profile
+        from rouenparis.trip_storage import append_trip_profiles, load_trip_profiles
+
+        base = datetime(2026, 10, 28, 7, 30, tzinfo=TZ)
+        profile = make_profile(
+            "OCESN3106F1187_F:TER:FR:Line::97E911FA-C8F2-4861-AD3C-C36CF4750A49::87413013:87384008:6:1835:20261028",
+            [
+                {"stop_id": ROUEN, "dep_delay": 0, "dep_time": int(base.timestamp())},
+                {"stop_id": OISSEL, "arr_delay": 0, "arr_time": int(base.timestamp()) + 600,
+                 "dep_delay": 0, "dep_time": int(base.timestamp()) + 660},
+                {"stop_id": PARIS_TER, "arr_delay": 300, "arr_time": int(base.timestamp()) + 5880},
+            ],
+            base,
+        )
+        append_trip_profiles(self.data_dir, [profile])
+        profiles = list(load_trip_profiles(self.data_dir))
+        records = build_records_from_trip_profiles(profiles, self.settings, 300)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].origin_station, "Le Havre")
+
     def test_generate_all_without_snapshots_uses_trip_updates(self):
         from rouenparis.reports import generate_all
 

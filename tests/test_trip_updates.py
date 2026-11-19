@@ -126,6 +126,28 @@ class OriginUic8ExtractionTest(unittest.TestCase):
         self.assertIsNone(origin_uic8_from_trip_id("OCESN3125F"))
 
 
+class ExcludedOriginTest(unittest.TestCase):
+    def test_mantes_la_jolie_is_excluded(self):
+        from rouenparis.trip_updates import is_excluded_origin_trip
+        tid = "OCESN16354F1187_F:TER:FR:Line::AAAA::87317263:87271007:9:100:20261028"
+        self.assertTrue(is_excluded_origin_trip(tid, ("87317263", "87381509")))
+
+    def test_mantes_second_uic8_is_excluded(self):
+        from rouenparis.trip_updates import is_excluded_origin_trip
+        tid = "OCESN16354F1187_F:TER:FR:Line::AAAA::87381509:87271007:9:100:20261028"
+        self.assertTrue(is_excluded_origin_trip(tid, ("87317263", "87381509")))
+
+    def test_le_havre_is_not_excluded(self):
+        from rouenparis.trip_updates import is_excluded_origin_trip
+        tid = "OCESN3106F1187_F:TER:FR:Line::AAAA::87413013:87384008:6:100:20261028"
+        self.assertFalse(is_excluded_origin_trip(tid, ("87317263", "87381509")))
+
+    def test_simple_id_is_not_excluded(self):
+        from rouenparis.trip_updates import is_excluded_origin_trip
+        self.assertFalse(is_excluded_origin_trip("OCESN3125F", ("87317263",)))
+        self.assertFalse(is_excluded_origin_trip("OCESN3125F", ()))
+
+
 class StopPassageTest(unittest.TestCase):
     def test_uic8_extraction(self):
         stop = StopPassage(stop_id=ROUEN, stop_sequence=0, arrival_delay=0, arrival_time=100,

@@ -12,8 +12,8 @@ from .positions import append_position_records
 from .reports import generate_all
 from .sncf_client import SncfClient
 from .storage import TZ, Snapshot, append_snapshot
-from .trip_storage import append_trip_profiles
-from .trip_updates import TripUpdatesClient
+from .trip_storage import append_trip_profiles, prune_excluded_profiles
+from .trip_updates import TripUpdatesClient, is_excluded_origin_trip
 from .vehicle_positions import VehiclePositionsClient
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,19 @@ def collect_trip_updates(settings: Settings) -> int:
     destination = settings.destination_uic8
     profiles = client.fetch_profiles()
     selected = []
+    skipped_excluded = 0
     for profile in profiles:
+        if is_excluded_origin_trip(profile.trip_id, settings.excluded_origins_uic8):
+            skipped_excluded += 1
+            continue
         uics = {s.uic8 for s in profile.stops if s.uic8}
         if origin in uics or destination in uics:
             selected.append(profile)
+    if skipped_excluded:
+        logger.info(
+            "%d profiles skipped (excluded origin, e.g. Mantes-la-Jolie)",
+            skipped_excluded,
+        )
     if not selected:
         logger.warning("no TripUpdates profiles matched Rouen/Paris Saint-Lazare")
         return 0
@@ -120,6 +129,22 @@ def cmd_collect_positions(args) -> int:
     return 0
 
 
+def cmd_prune_excluded(args) -> int:
+    """Remove stored trip profiles whose origin is blacklisted (data history cleanup)."""
+    settings = Settings.from_env(require_token=False)
+    removed = prune_excluded_profiles(settings.data_dir, settings.excluded_origins_uic8)
+    total = sum(removed.values())
+    for name, count in sorted(removed.items()):
+        logger.info("%s: %d excluded profiles removed", name, count)
+    logger.info(
+        "%d excluded profiles removed from %d files (excluded origins: %s)",
+        total,
+        len(removed),
+        ", ".join(settings.excluded_origins_uic8) or "none",
+    )
+    return 0
+
+
 def cmd_report(args) -> int:
     settings = Settings.from_env(require_token=False)
     index = generate_all(settings.data_dir, settings.site_dir, settings)
@@ -189,6 +214,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="fetch GTFS-RT vehicle positions (no API token needed)",
     )
     positions.set_defaults(func=cmd_collect_positions)
+
+    prune = subparsers.add_parser(
+        "prune-excluded",
+        help="remove stored trip profiles whose origin is excluded "
+        "(e.g. Mantes-la-Jolie) from the data history",
+    )
+    prune.set_defaults(func=cmd_prune_excluded)
 
     resolve = subparsers.add_parser(
         "resolve-stations", help="resolve stop_area ids from UIC codes"
